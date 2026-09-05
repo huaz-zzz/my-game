@@ -1,0 +1,675 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>番客知溯</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        html, body {
+            height: 100%;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        }
+
+        /* 1. 页面默认光标：使用图一 */
+        html, body {
+            cursor: url('candy_1.png') 2 2, auto;
+        }
+
+        /* 2. 所有可点击元素（按钮、链接、带 onclick 的元素）在悬停和按下时：使用图二 */
+        button,
+        .send-btn,
+        .suggested-questions button,
+        [onclick] {
+            cursor: url('candy_1.png') 2 2, auto; /* 保持默认继承 */
+        }
+
+        button:hover,
+        .send-btn:hover,
+        .suggested-questions button:hover,
+        [onclick]:hover,
+        button:active,
+        .send-btn:active,
+        .suggested-questions button:active,
+        [onclick]:active {
+            cursor: url('candy_2.png') 2 2, pointer;
+        }
+        /* 让图片不接受鼠标事件 */
+        .send-btn img {
+            pointer-events: none;
+        }
+
+        body {
+            background: url('background_2.png');
+            background-size: cover;
+            background-position: center;
+            background-repeat: no-repeat;
+            background-attachment: fixed;
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* ========== 开屏动画 ========== */
+        .splash-screen {
+            position: fixed;
+            top: 0; left: 0;
+            width: 100%; height: 100%;
+            background: #faf8f5;
+            z-index: 9999;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-direction: column;
+            transition: opacity 0.6s ease;
+        }
+        .splash-screen.fade-out {
+            opacity: 0;
+            pointer-events: none;
+        }
+        .splash-screen img {
+            max-width: 220px;
+            width: 50vw;
+            height: auto;
+            display: block;
+        }
+        .splash-screen .splash-hint {
+            margin-top: 24px;
+            font-size: 14px;
+            color: #8b5a2b;
+            letter-spacing: 4px;
+            opacity: 0.7;
+        }
+
+        /* ========== Hero 大标题区域 ========== */
+        .hero-section {
+            position: absolute;     /* 脱离文档流，浮在上方 */
+            top: 0;
+            left: 0;
+            right: 0;
+            z-index: 100;
+            background: transparent;
+            pointer-events: none;     /* 鼠标穿透标题区，不阻挡下方聊天内容 */
+            padding: 12px 20px 4px 0;
+            /* 去掉 flex-shrink，absolute 元素不参与 flex */
+        }
+        /* 左侧：溯侨大标题 + 旋转长方形动效 */
+        .hero-left, .hero-right {
+            pointer-events: none;
+        }
+        .suqiao-wrapper {
+            position: relative;
+            display: inline-block;
+        }
+        .suqiao-img {
+            max-width: 320px;
+            width: 26vw;
+            min-width: 150px;
+            height: auto;
+            display: block;
+            opacity: 0;
+            animation: fadeInSuqiao 0.8s ease forwards;
+            animation-delay: 3.9s;
+        }
+        .rotating-rect {
+            position: absolute;
+            top: 35%;
+            right: 70%;
+            width: 160px;
+            height: 10px;
+            margin-right: -100px;
+            margin-top: -5px;
+            background: #000;
+            border-radius: 5px;
+            transform-origin: center center;
+            opacity: 0;
+            animation: rotateRect 1.5s linear forwards, fadeOutRect 0.4s ease forwards;
+            animation-delay: 2.4s, 3.9s;
+        }
+        /* 右侧：番客知溯标题 + 向左出现动效 */
+        .hero-right {
+            flex: 0 0 auto;
+            padding-top: 6px;
+            display: flex;
+            justify-content: flex-end;
+            margin-left: auto;   /* 新增这一行 */
+        }
+        .hero-right img {
+            max-width: 200px;
+            width: 42vw;
+            min-width: 260px;
+            height: auto;
+            display: block;
+            opacity: 0;
+            animation: slideInFromRight 1.2s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+            animation-delay: 2.4s;
+        }
+
+        /* 向左出现：从右侧滑入 */
+        @keyframes slideInFromRight {
+            0% {
+                opacity: 0;
+                transform: translateX(100px);
+            }
+            100% {
+                opacity: 1;
+                transform: translateX(0);
+            }
+        }
+
+        /* 溯侨动效：长方形旋转后淡出，溯侨淡入 */
+        @keyframes rotateRect {
+            0% { opacity: 1; transform: rotate(0deg); }
+            100% { opacity: 1; transform: rotate(360deg); }
+        }
+        @keyframes fadeOutRect {
+            0% { opacity: 1; }
+            100% { opacity: 0; }
+        }
+        @keyframes fadeInSuqiao {
+            0% { opacity: 0; transform: scale(0.92); }
+            100% { opacity: 1; transform: scale(1); }
+        }
+
+        /* ========== 聊天区域 ========== */
+        .chat-container {
+            position: relative;   /* 创建层叠上下文 */
+            z-index: 101;         /* 比 hero-section 的 100 高 */
+            flex: 1;
+            overflow-y: auto;
+            padding: 140px 16px 0px 16px;
+            max-width: 800px;
+            width: 100%;
+            margin: 0 auto;
+        }
+        .message {
+            display: flex;
+            gap: 12px;
+            margin-bottom: 20px;
+            animation: fadeIn 0.3s ease;
+        }
+        .message.user { flex-direction: row-reverse; }
+        /* 1. 修改 avatar 基础样式，移除文字居中，改为背景图显示 */
+        .avatar {
+            width: 54px;
+            height: 40px;
+            flex-shrink: 0;
+            background-size: contain;      /* 让图片完整显示，不裁剪 */
+            background-position: center;
+            background-repeat: no-repeat;
+            display: block;
+            /* 移除 border-radius: 50%; */
+            /* 移除 background-color */
+        }
+        /* 2. 分别设置机器人头像和用户头像的背景图 */
+        .avatar.bot {
+            background-image: url('stamp_1.png');
+            /* background-color: #8b5a2b; */
+            background-size: cover;
+            background-position: center;
+            background-repeat: no-repeat;
+        }
+        .avatar.user {
+            background-image: url('ship.png'); /* 替换为你的用户头像图片路径 */
+            background-color: #e7dfd3;
+        }
+        .bubble {
+            max-width: 70%;
+            padding: 12px 16px;
+            border-radius: 12px;
+            line-height: 1.6;
+            font-size: 14px;
+        }
+        .message.bot .bubble {
+            background: rgba(255, 250, 240, 0.95);  /* 米白/宣纸色 */
+            color: #4a3b2a;  /* 深褐 */
+            border: 1px solid rgba(139, 90, 43, 0.2);
+            box-shadow: 0 2px 8px rgba(139, 90, 43, 0.08);
+        }
+        .message.user .bubble {
+            background: rgba(139, 90, 43, 0.85);  /* 赭石色 */
+            color: #fff;
+        }
+        .suggested-questions {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin-top: 12px;
+        }
+        .suggested-questions button {
+            padding: 8px 16px;
+            border: 1px solid #d9d9d9;
+            background: #fff;
+            border-radius: 16px;
+            cursor: pointer;
+            font-size: 13px;
+            color: #804426;
+            transition: all 0.2s;
+        }
+        .suggested-questions button:hover {
+            border-color: #804426;
+            background: #fff5e6;
+        }
+
+        /* ========== 输入区域：放大并固定在底部 ========== */
+        .input-area {
+            background: rgba(255,255,255,0.65);
+            border-top: 1px solid rgba(255,255,255,0.45);
+            padding: 16px 24px;
+            max-width: 1000px;
+            width: 100%;
+            margin: 0 auto;
+            flex-shrink: 0;
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+        }
+        .input-wrapper {
+            display: flex;
+            gap: 14px;
+            align-items: flex-end;
+        }
+        .input-wrapper textarea {
+            flex: 1;
+            border: none;
+            border-radius: 16px;
+            padding: 18px 22px;
+            font-size: 16px;
+            resize: none;
+            outline: none;
+            min-height: 56px;
+            max-height: 180px;
+            line-height: 1.6;
+            background: rgba(255,255,255,0.5);
+            box-shadow: 0 4px 24px rgba(0,0,0,0.08);
+            transition: background 0.2s, box-shadow 0.2s;
+            color: #333;
+            cursor: url('candy_1.png') 2 2, auto;
+        }
+        .input-wrapper textarea::placeholder {
+            color: rgba(0,0,0,0.45);
+        }
+        .input-wrapper textarea:focus {
+            background: rgba(255,255,255,0.78);
+            box-shadow: 0 6px 32px rgba(24,144,255,0.18);
+        }
+        .send-btn {
+            width: 56px; height: 56px;
+            background: rgba(196, 163, 114, 0.88);
+            border: none;
+            border-radius: 16px;
+            color: white;
+            cursor: pointer;
+            display: flex; align-items: center; justify-content: center;
+            transition: background 0.2s, transform 0.1s;
+            flex-shrink: 0;
+            box-shadow: 0 4px 18px rgba(255, 163, 24, 0.28);
+        }
+        .send-btn:hover {
+            background: rgb(157, 119, 100);
+            transform: translateY(-1px);
+        }
+        .send-btn:disabled {
+            background: rgba(191,191,191,0.85);
+            cursor: url('candy_2.png') 2 2, not-allowed;
+        }
+        .typing {
+            display: flex;
+            gap: 4px;
+            padding: 12px 16px;
+        }
+        .typing span {
+            width: 8px; height: 8px;
+            background: #bfbfbf;
+            border-radius: 50%;
+            animation: bounce 1.4s infinite ease-in-out;
+        }
+        .typing span:nth-child(1) { animation-delay: -0.32s; }
+        .typing span:nth-child(2) { animation-delay: -0.16s; }
+        @keyframes bounce {
+            0%, 80%, 100% { transform: scale(0); }
+            40% { transform: scale(1); }
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        /* ========== 响应式 ========== */
+        @media (max-width: 768px) {
+            .hero-section {
+                flex-direction: column;
+                align-items: center;
+                padding: 12px 16px;
+                gap: 10px;
+            }
+            .suqiao-img {
+                width: 56vw;
+                max-width: 240px;
+            }
+            .rotating-rect {
+                top: 22%;
+                right: 18%;
+                width: 110px;
+                height: 8px;
+                margin-right: -55px;
+                margin-top: -4px;
+            }
+            .hero-left {
+                position: relative;
+                left: auto;
+                top: auto;
+            }
+            .hero-right {
+                margin-left: 0;    /* 新增这一行 */
+            }
+            .hero-right img {
+                width: 74vw;
+                max-width: 360px;
+            }
+            .input-area {
+                padding: 16px 20px;
+            }
+            .input-wrapper textarea {
+                min-height: 56px;
+                padding: 14px 18px;
+                font-size: 16px;
+            }
+            .send-btn {
+                width: 56px; height: 56px;
+            }
+        }
+    </style>
+</head>
+<body>
+
+    <!-- ===== 开屏动画（融合自第二个文件） ===== -->
+    <div class="splash-screen" id="splashScreen">
+        <!-- 开屏图片元素，初始 src 为第一帧 -->
+        <img id="splashImg" src="loading_3.png" alt="loading">
+        <div class="splash-hint">番客知溯</div>
+    </div>
+
+    <!-- Hero 区域：左侧溯侨大标题，右侧番客知溯（带动效） -->
+    <div class="hero-section">
+        <div class="hero-left">
+            <div class="suqiao-wrapper">
+                <img src="溯侨.png" alt="溯侨" class="suqiao-img">
+                <div class="rotating-rect"></div>
+            </div>
+        </div>
+        <div class="hero-right">
+            <img src="title_3.png" alt="番客知溯">
+        </div>
+    </div>
+
+    <div class="chat-container" id="chatContainer">
+        <!-- 欢迎消息 -->
+        <div class="message bot">
+            <div class="avatar bot"></div>
+            <div>
+                <div class="bubble">
+                    你好，我是华侨知识专属回答小助手！我可以为你解答华侨历史、侨批文化、海外会馆、侨乡政策、华工发展史、华侨代表人物等相关问题，有什么想问的尽管提问吧~
+                </div>
+                <div class="suggested-questions">
+                    <button onclick="sendQuestion('华侨和华人有什么区别？')">华侨和华人有什么区别？</button>
+                    <button onclick="sendQuestion('猪仔馆是什么？')">猪仔馆是什么？</button>
+                    <button onclick="sendQuestion('什么是侨批？')">什么是侨批？</button>
+                    <button onclick="sendQuestion('海外华侨会馆有什么作用？')">海外华侨会馆有什么作用？</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="input-area">
+        <div class="input-wrapper">
+            <textarea id="userInput" placeholder="和 知识库 + 聊天机器人 聊天" rows="1"></textarea>
+            <button class="send-btn" id="sendBtn" onclick="sendMessage()">
+                <img src="brid.png" alt="发送" style="width: 30px; height: 30px; display: block;">
+            </button>
+        </div>
+    </div>
+
+        <!-- 左下角动图容器 -->
+    <div id="left-bottom-animation" style="position: fixed; bottom: 10px; left: 10px; z-index: 999;">
+        <img id="animation-img" src="frames/1.png" alt="gif" style="width: 250px; height: auto; display: block;">
+    </div>
+
+    <script>
+        // ============================================================
+        // 开屏动画（使用外部图片）
+        // 请将下面数组中的图片路径替换为你自己准备的图片文件路径
+        // ============================================================
+        (function() {
+            // ★★★ 用户需要替换这里的图片路径 ★★★
+            const splashFrames = [
+                'loading_3.png',
+                'loading_2.png',
+                'loading_1.png',
+                'loading_4.png',
+                // 按需添加更多帧
+            ];
+
+            const splashImg = document.getElementById('splashImg');
+            const splashScreen = document.getElementById('splashScreen');
+            let frameIndex = 0;
+            let rounds = 0;
+            const maxRounds = 1; // 播放1轮
+
+            // 如果只有一张图片，则直接显示并延迟消失；否则循环播放
+            if (splashFrames.length === 1) {
+                splashImg.src = splashFrames[0];
+                setTimeout(function() {
+                    splashScreen.classList.add('fade-out');
+                    setTimeout(function() {
+                        splashScreen.style.display = 'none';
+                    }, 600);
+                }, 1500); // 单张图片显示1.5秒后消失
+            } else {
+                // 多张图片循环播放
+                const interval = setInterval(function() {
+                    frameIndex++;
+                    if (frameIndex >= splashFrames.length) {
+                        frameIndex = 0;
+                        rounds++;
+                    }
+                    splashImg.src = splashFrames[frameIndex];
+
+                    if (rounds >= maxRounds && frameIndex === splashFrames.length - 1) {
+                        clearInterval(interval);
+                        setTimeout(function() {
+                            splashScreen.classList.add('fade-out');
+                            setTimeout(function() {
+                                splashScreen.style.display = 'none';
+                            }, 600);
+                        }, 400); // 最后一帧多停留400ms
+                    }
+                }, 300); // 每300ms切换一帧
+            }
+        })();
+
+        // ============================================================
+        // 原有聊天功能（完全保留）
+        // ============================================================
+        // const API_KEY = 'app-IHEAlIb5wSI0xqgQxXbGRJv6';  // 替换为你的 Dify API Key
+        // const API_URL = 'https://api.dify.ai/v1/chat-messages';
+        const API_URL = '/api/chat';
+        let conversationId = '';
+        let isStreaming = false;
+
+        // 固定当前浏览器会话的用户 ID，避免 conversation_id 与用户不匹配导致 404
+        const USER_ID = 'web-user-' + Math.random().toString(36).slice(2);
+
+        // 自动调整 textarea 高度
+        const textarea = document.getElementById('userInput');
+        textarea.addEventListener('input', function() {
+            this.style.height = 'auto';
+            this.style.height = Math.min(this.scrollHeight, 160) + 'px';
+        });
+
+        // 回车发送，Shift+回车换行
+        textarea.addEventListener('keydown', function(e) {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                sendMessage();
+            }
+        });
+
+        function sendQuestion(question) {
+            document.getElementById('userInput').value = question;
+            sendMessage();
+        }
+
+        async function sendMessage() {
+            const input = document.getElementById('userInput');
+            const query = input.value.trim();
+            if (!query || isStreaming) return;
+
+            // 添加用户消息
+            addMessage('user', query);
+            input.value = '';
+            input.style.height = 'auto';
+            isStreaming = true;
+            document.getElementById('sendBtn').disabled = true;
+
+            // 添加打字指示器
+            const typingId = addTypingIndicator();
+
+            try {
+                const response = await fetch(API_URL, {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${API_KEY}`,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        inputs: {},
+                        query: query,
+                        response_mode: 'streaming',
+                        conversation_id: conversationId,
+                        user: USER_ID
+                    })
+                });
+
+                // 移除打字指示器
+                removeTypingIndicator(typingId);
+
+                if (!response.ok) {
+                    throw new Error('API 请求失败');
+                }
+
+                // 处理 SSE 流式响应
+                const reader = response.body.getReader();
+                const decoder = new TextDecoder();
+                let botMessageId = addMessage('bot', '');
+                let fullAnswer = '';
+
+                while (true) {
+                    const { done, value } = await reader.read();
+                    if (done) break;
+
+                    const chunk = decoder.decode(value, { stream: true });
+                    const lines = chunk.split('\n');
+
+                    for (const line of lines) {
+                        if (line.startsWith('data: ')) {
+                            const data = line.slice(6);
+                            if (data === '[DONE]') continue;
+
+                            try {
+                                const parsed = JSON.parse(data);
+                                console.log('Dify event:', parsed.event, parsed);
+
+                                // 累加 message / agent_message 返回的文本片段
+                                if ((parsed.event === 'message' || parsed.event === 'agent_message') && parsed.answer) {
+                                    fullAnswer += parsed.answer;
+                                    updateMessage(botMessageId, fullAnswer);
+                                    if (parsed.conversation_id) {
+                                        conversationId = parsed.conversation_id;
+                                    }
+                                }
+
+                                // Workflow / Chatflow 应用在 workflow_finished 中给出最终答案
+                                if (parsed.event === 'workflow_finished' && parsed.data?.outputs?.answer) {
+                                    fullAnswer = parsed.data.outputs.answer;
+                                    updateMessage(botMessageId, fullAnswer);
+                                }
+                            } catch (e) {
+                                // 忽略解析错误
+                            }
+                        }
+                    }
+                }
+
+            } catch (error) {
+                removeTypingIndicator(typingId);
+                addMessage('bot', '抱歉，发生了错误，请稍后重试。');
+                console.error(error);
+            } finally {
+                isStreaming = false;
+                document.getElementById('sendBtn').disabled = false;
+            }
+        }
+
+        function addMessage(role, content) {
+            const container = document.getElementById('chatContainer');
+            const id = 'msg-' + Date.now();
+            const div = document.createElement('div');
+            div.className = `message ${role}`;
+            div.id = id;
+            div.innerHTML = `
+                <div class="avatar ${role}">${role === 'bot' ? '' : ''}</div>
+                <div class="bubble">${content}</div>
+            `;
+            container.appendChild(div);
+            container.scrollTop = container.scrollHeight;
+            return id;
+        }
+
+        function updateMessage(id, content) {
+            const msg = document.getElementById(id);
+            if (msg) {
+                msg.querySelector('.bubble').textContent = content;
+                const container = document.getElementById('chatContainer');
+                container.scrollTop = container.scrollHeight;
+            }
+        }
+
+        function addTypingIndicator() {
+            const container = document.getElementById('chatContainer');
+            const id = 'typing-' + Date.now();
+            const div = document.createElement('div');
+            div.className = 'message bot';
+            div.id = id;
+            div.innerHTML = `
+                <div class="avatar bot"></div>
+                <div class="bubble typing">
+                    <span></span><span></span><span></span>
+                </div>
+            `;
+            container.appendChild(div);
+            container.scrollTop = container.scrollHeight;
+            return id;
+        }
+
+        function removeTypingIndicator(id) {
+            const el = document.getElementById(id);
+            if (el) el.remove();
+        }
+        // 动图javascript循环切换逻辑 
+        // 生成16张图片的路径（命名为 frame_1.png ~ frame_16.png）
+        const animationImages = [];
+        const folderPath = 'frames/';  // 如果文件夹名不同，改这里
+        for (let i = 1; i <= 16; i++) {
+            animationImages.push(folderPath + i + '.png');
+        }
+
+        let currentIndex = 0;
+        const imgElement = document.getElementById('animation-img');
+
+        // 每200毫秒切换一帧（可根据需要调整速度）
+        setInterval(function() {
+            currentIndex = (currentIndex + 1) % animationImages.length;
+            imgElement.src = animationImages[currentIndex];
+        }, 200);
+    </script>
+</body>
+</html>
